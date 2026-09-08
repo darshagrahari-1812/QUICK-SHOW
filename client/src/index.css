@@ -6,6 +6,8 @@
   --color-primary-dull: #D63854;
 }
 
+@custom-variant not-hover (&:not(:hover));
+
 * {
   font-family: "Outfit", sans-serif;
   scrollbar-width: thin;
@@ -28,4 +30,12 @@ input::-webkit-inner-spin-button {
 
 ::-webkit-calendar-picker-indicator {
   filter: invert(1);
+}
+
+.group:hover .group-hover\:not-hover\:opacity-40:not(:hover) {
+  opacity: 0.4;
+}
+
+.group:hover .group-hover\:not-hover\:opacity-50:not(:hover) {
+  opacity: 0.5;
 }

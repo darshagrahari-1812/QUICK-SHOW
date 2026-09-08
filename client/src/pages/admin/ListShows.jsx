@@ -1,44 +1,51 @@
 import React, { useEffect, useState } from 'react'
-import { dummyShowsData } from '../../assets/assets';
 import Loading from '../../components/Loading';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat'
+import { useAppContext } from '../../context/AppContext';
+import toast from 'react-hot-toast';
 
 const ListShows = () => {
   const currency = import.meta.env.VITE_CURRENCY
+  const { axios, getToken, user } = useAppContext();
 
-  const [shows,setShows]=useState([]);
-  const [loading,setLoading] =useState(true);
+  const [shows, setShows] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-
-  const getAllShows=async()=>{
+  const getAllShows = async () => {
     try {
-      setShows([{
-        movie:dummyShowsData[0],
-        showDateTime:"2025-06-30T02:30:00.000Z",
-      
-        showPrice:59,
-        occupiedSeats:{
-          A1:"user_1",
-          B1:"user_2",
-          C1:"user_3"
+      setLoading(true);
+      const token = await getToken();
+      const { data } = await axios.get('/api/admin/all-shows', {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
-      }]);
-      setLoading(false)
+      });
+
+      if (data.success && Array.isArray(data.shows)) {
+        setShows(data.shows);
+      } else {
+        toast.error(data.message || 'Failed to fetch shows');
+      }
     } catch (error) {
-      console.error(error);
-      
+      console.error('Error fetching shows:', error);
+      toast.error(error.response?.data?.message || 'Error fetching shows');
+    } finally {
+      setLoading(false);
     }
   }
 
-  useEffect(()=>{
-    getAllShows();
-  },[]);
-
+  useEffect(() => {
+    if (user) {
+      getAllShows();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   return !loading ? (
     <>
-      <Title text1={"List "} text2={"Shows"}/>
+      <Title text1={"List "} text2={"Shows"} />
       <div className='max-w-4xl mt-6 overflow-x-auto'>
         <table className='w-full border-collapse rounded-md overflow-hidden text-nowrap'>
           <thead>
@@ -47,26 +54,37 @@ const ListShows = () => {
               <th className='p-2 font-medium pl-5'>Show Time</th>
               <th className='p-2 font-medium pl-5'>Total Bookings</th>
               <th className='p-2 font-medium pl-5'>Earnings</th>
-
             </tr>
           </thead>
-            <tbody className="text-sm font-light">
-               {shows.map((show, index) => (
-                    <tr key={index}className="border-b border-primary/10 bg-primary/5 even:bg-primary/10">
-                      <td className="p-2 min-w-45 pl-5">{show.movie.title}</td>
-                      <td className="p-2">{dateFormat(show.showDateTime)}</td>
-                      <td className="p-2">{Object.keys(show.occupiedSeats).length}</td>
-                      <td className="p-2">{currency} {Object.keys(show.occupiedSeats).length * show.showPrice}</td>
-            </tr>
-  ))}
-</tbody>
-          
-        </table>
+          <tbody className="text-sm font-light">
+            {shows && shows.length > 0 ? (
+              shows.map((show, index) => {
+                const totalBookings = show?.occupiedSeats && typeof show.occupiedSeats === 'object'
+                  ? Object.keys(show.occupiedSeats).length
+                  : 0;
+                const price = Number(show?.showPrice) || 0;
 
+                return (
+                  <tr key={show?._id || index} className="border-b border-primary/10 bg-primary/5 even:bg-primary/10 hover:bg-primary/20 transition-colors duration-150">
+                    <td className="p-2 min-w-45 pl-5">{show?.movie?.title || 'Unknown Movie'}</td>
+                    <td className="p-2">{show?.showDateTime ? dateFormat(show.showDateTime) : 'N/A'}</td>
+                    <td className="p-2">{totalBookings}</td>
+                    <td className="p-2">{currency} {totalBookings * price}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={4} className="p-6 text-center text-gray-400">
+                  No shows available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-    
     </>
-  ): <Loading/>
+  ) : <Loading />
 }
 
 export default ListShows

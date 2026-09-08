@@ -57,8 +57,8 @@ const AdminSidebar = () => {
             key={index}
             to={link.path} end
             className={({ isActive }) =>
-              `relative flex items-center max-md:justify-center gap-2 w-full py-2.5 min-md:pl-10 first:mt-6 text-gray-400 ${
-                isActive ? 'bg-primary/15 text-primary' : ''
+              `relative flex items-center max-md:justify-center gap-2 w-full py-2.5 min-md:pl-10 first:mt-6 text-gray-400 hover:text-white hover:bg-primary/10 transition duration-200 ${
+                isActive ? 'bg-primary/15 text-primary hover:text-primary' : ''
               }`
             }
           >
