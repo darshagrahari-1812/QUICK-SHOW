@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
+import { inngest } from "../inngest/index.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -109,6 +110,13 @@ export const createBooking = async (req, res) => {
 
         booking.paymentLink = session.url;
         await booking.save();
+        //Run Inngest scheduler func to check paymemt status after 10 min
+        await inngest.send({
+            name: "app/checkpayment",
+            data: {
+                bookingId: booking._id.toString(),
+            },
+        });
 
         return res.json({ success: true, url: session.url, bookingId: booking._id });
 
@@ -235,7 +243,7 @@ export const getOccupiedSeats = async (req, res) => {
     }
 };
 
-// API to pay / confirm a booking
+// API to create a Stripe checkout session for an unpaid booking
 export const payBooking = async (req, res) => {
     try {
         const { bookingId } = req.body;
@@ -243,20 +251,66 @@ export const payBooking = async (req, res) => {
             return res.status(400).json({ success: false, message: "Booking ID is required" });
         }
 
-        const booking = await Booking.findByIdAndUpdate(
-            bookingId,
-            { isPaid: true },
-            { returnDocument: 'after' }
-        );
+        const booking = await Booking.findById(bookingId).populate({
+            path: 'show',
+            populate: { path: 'movie' },
+        });
 
         if (!booking) {
             return res.status(404).json({ success: false, message: "Booking not found" });
         }
 
-        return res.json({ success: true, message: "Payment confirmed successfully!", booking });
+        if (booking.isPaid) {
+            return res.json({ success: false, message: "This booking is already paid" });
+        }
+
+        const showData = booking.show;
+        if (!showData) {
+            return res.status(404).json({ success: false, message: "Associated show not found" });
+        }
+
+        const movieTitle = showData.movie?.title || 'Movie Ticket';
+        const posterPath = showData.movie?.poster_path || '';
+        const posterUrl = posterPath
+            ? (posterPath.startsWith('http') ? posterPath : `https://image.tmdb.org/t/p/w300${posterPath}`)
+            : undefined;
+
+        const origin = req.headers.origin || 'http://localhost:5173';
+
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            mode: 'payment',
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: `${movieTitle} — ${booking.bookedSeats.length} Seat${booking.bookedSeats.length > 1 ? 's' : ''}`,
+                            description: `Seats: ${booking.bookedSeats.join(', ')}`,
+                            ...(posterUrl ? { images: [posterUrl] } : {}),
+                        },
+                        unit_amount: Math.round((showData.showPrice || 0) * 100),
+                    },
+                    quantity: booking.bookedSeats.length,
+                },
+            ],
+            success_url: `${origin}/booking-success?bookingId=${booking._id}&sessionId={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${origin}/booking-cancel?bookingId=${booking._id}`,
+            metadata: {
+                bookingId: String(booking._id),
+                userId: String(booking.user),
+                showId: String(showData._id),
+                seats: booking.bookedSeats.join(','),
+            },
+        });
+
+        booking.paymentLink = session.url;
+        await booking.save();
+
+        return res.json({ success: true, url: session.url });
 
     } catch (error) {
         console.error("Pay booking error:", error.message);
-        return res.json({ success: false, message: error.message });
+        return res.json({ success: false, message: error.message || "Error processing payment" });
     }
 };

@@ -14,6 +14,7 @@ const MyBookings = () => {
   const navigate = useNavigate()
   const [bookings, setBookings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [payingId, setPayingId] = useState(null)
 
   const getPosterUrl = (movie) => {
     const rawPath = movie?.poster_path || movie?.backdrop_path || ''
@@ -45,16 +46,23 @@ const MyBookings = () => {
 
   const handlePayBooking = async (bookingId) => {
     try {
-      const { data } = await axios.post('/api/booking/pay', { bookingId })
-      if (data.success) {
-        toast.success(data.message || 'Payment confirmed successfully!')
-        getMyBookings()
+      setPayingId(bookingId)
+      const token = await getToken()
+      const { data } = await axios.post(
+        '/api/booking/pay',
+        { bookingId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (data.success && data.url) {
+        window.location.href = data.url
       } else {
-        toast.error(data.message || 'Payment failed')
+        toast.error(data.message || 'Payment initiation failed')
+        setPayingId(null)
       }
     } catch (error) {
       console.error('Pay booking error:', error)
       toast.error(error.response?.data?.message || 'Error processing payment')
+      setPayingId(null)
     }
   }
 
@@ -141,9 +149,10 @@ const MyBookings = () => {
                     {!item.isPaid ? (
                       <button
                         onClick={() => handlePayBooking(item._id)}
-                        className='bg-primary hover:bg-primary-dull text-white px-4 py-1.5 text-sm rounded-full font-medium transition cursor-pointer active:scale-95 shadow-md shadow-primary/20'
+                        disabled={payingId === item._id}
+                        className='bg-primary hover:bg-primary-dull text-white px-4 py-1.5 text-sm rounded-full font-medium transition cursor-pointer active:scale-95 shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed'
                       >
-                        Pay Now
+                        {payingId === item._id ? 'Redirecting...' : 'Pay Now'}
                       </button>
                     ) : (
                       <span className='bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 text-xs rounded-full font-medium'>

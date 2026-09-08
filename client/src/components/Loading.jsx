@@ -1,17 +1,17 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 
 const Loading = () => {
-  const { nextUrl } = useParams;
-  const navigate = useNavigate;
+  const { nextUrl } = useParams();
+  const navigate = useNavigate();
   useEffect(() => {
     if (nextUrl) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         navigate('/' + nextUrl);
       }, 8000)
-
+      return () => clearTimeout(timer);
     }
-  }, [nextUrl]);
+  }, [nextUrl, navigate]);
   return (
     <div className='flex justify-center items-center h-[80vh] '>
       <div className='animate-spin rounded-full h-14 w-14 border-2 
