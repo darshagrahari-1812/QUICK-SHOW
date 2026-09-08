@@ -1,6 +1,8 @@
 import { Inngest } from "inngest";
 import connectDB from "../config/db.js";
 import User from "../models/User.js";
+import Booking from "../models/Booking.js";
+import Show from "../models/Show.js";
 
 // Create Inngest client
 export const inngest = new Inngest({
@@ -96,9 +98,86 @@ const syncUserUpdation = inngest.createFunction(
     }
 );
 
+// Release seats and delete unpaid booking after 10 minutes
+const releaseSeatsAndDeleteBookings = inngest.createFunction(
+    {
+        id: "release-seats-and-delete-bookings",
+        triggers: {
+            event: "app/checkpayment"
+        }
+    },
+    async ({ event, step }) => {
+        // Wait for 10 minutes
+        const tenMinutesLater = new Date(Date.now() + 10 * 60 * 1000);
+        await step.sleepUntil("wait-for-10-minutes", tenMinutesLater);
+
+        // Check payment status
+        const result = await step.run("check-payment-status", async () => {
+            await connectDB();
+            const bookingId = event.data?.bookingId;
+
+            const booking = await Booking.findById(bookingId);
+
+            // Booking doesn't exist
+            if (!booking) {
+                console.log(`[Inngest] Booking not found for id: ${bookingId}`);
+                return {
+                    success: false,
+                    message: "Booking not found",
+                };
+            }
+
+            // Payment already completed
+            if (booking.isPaid) {
+                console.log(`[Inngest] Booking ${bookingId} is already paid`);
+                return {
+                    success: true,
+                    message: "Booking already paid",
+                };
+            }
+
+            // Get show
+            const show = await Show.findById(booking.show);
+            if (!show) {
+                console.log(`[Inngest] Show not found for booking ${bookingId}`);
+                return {
+                    success: false,
+                    message: "Show not found",
+                };
+            }
+
+            // Release occupied seats
+            if (show.occupiedSeats) {
+                booking.bookedSeats.forEach((seat) => {
+                    if (show.occupiedSeats instanceof Map) {
+                        show.occupiedSeats.delete(seat);
+                    } else {
+                        delete show.occupiedSeats[seat];
+                    }
+                });
+                show.markModified("occupiedSeats");
+                await show.save();
+            }
+
+            // Delete unpaid booking
+            await Booking.findByIdAndDelete(booking._id);
+
+            console.log(`[Inngest] Released seats and deleted unpaid booking: ${bookingId}`);
+            return {
+                success: true,
+                message: "Seats released and booking deleted",
+                bookingId,
+            };
+        });
+
+        return result;
+    }
+);
+
 // Export all functions
 export const functions = [
     syncUserCreation,
     syncUserDeletion,
-    syncUserUpdation
+    syncUserUpdation,
+    releaseSeatsAndDeleteBookings
 ];
