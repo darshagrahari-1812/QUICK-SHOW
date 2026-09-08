@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import Booking from "../models/Booking.js";
+import { inngest } from "../inngest/index.js";
 export const stripeWebhook = async (req, res) => {
     const stripeInstace = new Stripe(process.env.STRIPE_SECRET_KEY)
     const sig = req.headers['stripe-signature'];
@@ -27,6 +28,11 @@ export const stripeWebhook = async (req, res) => {
                 })
                 break;
             }
+                //Send confir email
+                await inngest.send({
+                    name: "app/show.booked",
+                    data: { bookingId }
+                })
 
 
 
