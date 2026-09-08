@@ -283,61 +283,64 @@ const releaseSeatsAndDeleteBookings = inngest.createFunction(
         return result;
     }
 );
-//Inngest func to send email when user books a show
+// Inngest func to send email when user books a show
 const sendBookingEmail = inngest.createFunction(
     {
         id: "send-booking-email",
-    },
-    {
-        event: "app/sendBookingEmail",
+        triggers: {
+            event: "app/sendBookingEmail",
+        },
     },
     async ({ event, step }) => {
-        const { bookingId } = event.date;
-        const booking = await Booking.findById(bookingId).populate({
-            path: 'show',
-            populate: { path: "movie", model: "Movie" }
-        }).populate("user")
+        await step.run("send-email", async () => {
+            await connectDB();
+            const { bookingId } = event.data || {};
+            const booking = await Booking.findById(bookingId).populate({
+                path: 'show',
+                populate: { path: "movie", model: "Movie" }
+            }).populate("user");
 
-        await sendEmail({
-            to: booking.user.email,
-            subject: `Payment Confirmation: "${booking.show.movie.title}" booked!`,
-            body: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-            <h2>Hi ${booking.user.name},</h2>
+            if (!booking || !booking.user?.email) {
+                console.log(`[Inngest] Booking or user email not found for: ${bookingId}`);
+                return { success: false, message: "Booking or user email not found" };
+            }
 
-            <p>
-                Your booking for
-                <strong style="color: #F84565;">
-                    ${booking.show.movie.title}
-                </strong>
-                is confirmed.
-            </p>
+            await sendEmail({
+                to: booking.user.email,
+                subject: `Payment Confirmation: "${booking.show?.movie?.title || 'Movie'}" booked!`,
+                body: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+                <h2>Hi ${booking.user.name},</h2>
 
-            <p>
-                <strong>Date:</strong>
-                ${new Date(booking.show.showDateTime).toLocaleDateString(
-                'en-US',
-                { timeZone: 'Asia/Kolkata' }
-            )}
-                <br />
+                <p>
+                    Your booking for
+                    <strong style="color: #F84565;">
+                        ${booking.show?.movie?.title || 'Movie'}
+                    </strong>
+                    is confirmed.
+                </p>
 
-                <strong>Time:</strong>
-                ${new Date(booking.show.showDateTime).toLocaleTimeString(
-                'en-US',
-                { timeZone: 'Asia/Kolkata' }
-            )}
-            </p>
+                <p>
+                    <strong>Date:</strong>
+                    ${booking.show?.showDateTime ? new Date(booking.show.showDateTime).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                    <br />
 
-            <p>Enjoy the show! 🍿</p>
+                    <strong>Time:</strong>
+                    ${booking.show?.showDateTime ? new Date(booking.show.showDateTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
+                </p>
 
-            <p>
-                Thanks for booking with us!<br/>
-                QuickShow Team
-            </p>
-        </div>
-    `
+                <p>Enjoy the show! 🍿</p>
+
+                <p>
+                    Thanks for booking with us!<br/>
+                    QuickShow Team
+                </p>
+            </div>
+        `
+            });
+
+            return { success: true };
         });
-
     }
 );
 
