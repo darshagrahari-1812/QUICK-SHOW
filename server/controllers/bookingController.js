@@ -168,6 +168,16 @@ export const verifyPayment = async (req, res) => {
             await showData.save();
         }
 
+        // Send booking confirmation email via Inngest
+        try {
+            await inngest.send({
+                name: "app/sendBookingEmail",
+                data: { bookingId: String(booking._id) }
+            });
+        } catch (inngestErr) {
+            console.error("Failed to trigger sendBookingEmail event:", inngestErr.message);
+        }
+
         return res.json({ success: true, message: 'Payment verified & booking confirmed!', booking });
 
     } catch (error) {
