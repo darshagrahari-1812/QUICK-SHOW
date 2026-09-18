@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import { inngest } from "../inngest/index.js";
+import { sendBookingConfirmationEmail } from "../config/nodeMailer.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -168,7 +169,12 @@ export const verifyPayment = async (req, res) => {
             await showData.save();
         }
 
-        // Send booking confirmation email via Inngest
+        // Send booking confirmation email directly
+        sendBookingConfirmationEmail(booking._id).catch(err => {
+            console.error("Direct email sending error:", err.message);
+        });
+
+        // Also dispatch to Inngest for background resilience
         try {
             await inngest.send({
                 name: "app/sendBookingEmail",

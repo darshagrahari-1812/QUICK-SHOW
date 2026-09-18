@@ -4,7 +4,7 @@ import User from "../models/User.js";
 
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
-import sendEmail from "../config/nodeMailer.js";
+import sendEmail, { sendBookingConfirmationEmail } from "../config/nodeMailer.js";
 
 // Create Inngest client
 export const inngest = new Inngest({
@@ -292,54 +292,12 @@ const sendBookingEmail = inngest.createFunction(
         },
     },
     async ({ event, step }) => {
-        await step.run("send-email", async () => {
-            await connectDB();
+        return await step.run("send-email", async () => {
             const { bookingId } = event.data || {};
-            const booking = await Booking.findById(bookingId).populate({
-                path: 'show',
-                populate: { path: "movie", model: "Movie" }
-            }).populate("user");
-
-            if (!booking || !booking.user?.email) {
-                console.log(`[Inngest] Booking or user email not found for: ${bookingId}`);
-                return { success: false, message: "Booking or user email not found" };
+            if (bookingId) {
+                return await sendBookingConfirmationEmail(bookingId);
             }
-
-            await sendEmail({
-                to: booking.user.email,
-                subject: `Payment Confirmation: "${booking.show?.movie?.title || 'Movie'}" booked!`,
-                body: `
-            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-                <h2>Hi ${booking.user.name},</h2>
-
-                <p>
-                    Your booking for
-                    <strong style="color: #F84565;">
-                        ${booking.show?.movie?.title || 'Movie'}
-                    </strong>
-                    is confirmed.
-                </p>
-
-                <p>
-                    <strong>Date:</strong>
-                    ${booking.show?.showDateTime ? new Date(booking.show.showDateTime).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
-                    <br />
-
-                    <strong>Time:</strong>
-                    ${booking.show?.showDateTime ? new Date(booking.show.showDateTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata' }) : 'N/A'}
-                </p>
-
-                <p>Enjoy the show! 🍿</p>
-
-                <p>
-                    Thanks for booking with us!<br/>
-                    QuickShow Team
-                </p>
-            </div>
-        `
-            });
-
-            return { success: true };
+            return { success: false, message: "No bookingId provided" };
         });
     }
 );
