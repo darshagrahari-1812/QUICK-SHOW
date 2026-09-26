@@ -12,8 +12,25 @@ const connectDB = async () => {
         return cached.conn;
     }
 
-    if (!process.env.MONGODB_URI) {
-        throw new Error("MONGODB_URI is not defined in environment variables");
+    let uri = (process.env.MONGODB_URI || "").trim();
+
+    // Strip wrapping quotes (single, double, or backticks)
+    if (
+        (uri.startsWith('"') && uri.endsWith('"')) ||
+        (uri.startsWith("'") && uri.endsWith("'")) ||
+        (uri.startsWith('`') && uri.endsWith('`'))
+    ) {
+        uri = uri.slice(1, -1).trim();
+    }
+
+    if (!uri) {
+        throw new Error("MONGODB_URI is empty in environment variables");
+    }
+
+    if (!uri.startsWith("mongodb://") && !uri.startsWith("mongodb+srv://")) {
+        throw new Error(
+            `Invalid MONGODB_URI scheme (starts with "${uri.substring(0, 10)}..."). Please check the MONGODB_URI environment variable in Vercel settings.`
+        );
     }
 
     if (!cached.promise) {
@@ -22,7 +39,7 @@ const connectDB = async () => {
             maxPoolSize: 10,
         };
 
-        cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
+        cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
             console.log("Database connected successfully");
             return mongooseInstance;
         });
