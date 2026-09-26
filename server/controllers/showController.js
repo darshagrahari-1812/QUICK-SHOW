@@ -6,77 +6,81 @@ import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
 
 // =====================================================
-// TMDB HTTPS Agent
+// TMDB Request with Native Fetch, Retry & Backoff
 // =====================================================
 
-const httpsAgent = new https.Agent({
-    keepAlive: false,
-});
+const tmdbRequest = async ({ method = "GET", url, params = {} }, retries = 5, delay = 400) => {
+    const key = process.env.TMDB_API_KEY?.trim() || "";
+    const headers = {
+        Accept: "application/json",
+        "User-Agent": "QuickShow/1.0",
+    };
 
-// =====================================================
-// TMDB Axios Instance
-// =====================================================
+    const fullUrl = url.startsWith("http")
+        ? url
+        : `https://api.themoviedb.org/3${url.startsWith("/") ? "" : "/"}${url}`;
+    const urlObj = new URL(fullUrl);
 
-const tmdb = axios.create({
-    baseURL: "https://api.themoviedb.org/3",
-    timeout: 20000,
-    httpsAgent,
-    headers: {
-        accept: "application/json",
-    },
-});
-
-// =====================================================
-// TMDB Authorization
-// =====================================================
-
-tmdb.interceptors.request.use((config) => {
-    if (process.env.TMDB_API_KEY) {
-        config.headers.Authorization =
-            `Bearer ${process.env.TMDB_API_KEY}`;
+    // Apply any query params
+    for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null) {
+            urlObj.searchParams.set(k, String(v));
+        }
     }
 
-    return config;
-});
+    // Support both JWT v4 Read Access Token (starts with eyJ) and v3 API key
+    if (key) {
+        if (key.startsWith("eyJ")) {
+            headers["Authorization"] = `Bearer ${key}`;
+        } else {
+            urlObj.searchParams.set("api_key", key);
+        }
+    }
 
-// =====================================================
-// Helper: TMDB Request With Retry
-// =====================================================
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const res = await fetch(urlObj.toString(), {
+                method,
+                headers,
+            });
 
-const tmdbRequest = async (config, retries = 3) => {
-    try {
-        return await tmdb.request(config);
-    } catch (error) {
+            if (res.ok) {
+                const data = await res.json();
+                return { data };
+            }
 
-        const retryableErrors = [
-            "ECONNRESET",
-            "ETIMEDOUT",
-            "ECONNABORTED",
-            "EAI_AGAIN",
-        ];
+            // Don't retry client errors like 401 or 404
+            if (res.status === 404 || res.status === 401 || res.status === 403) {
+                const errData = await res.json().catch(() => ({}));
+                const error = new Error(
+                    errData.status_message || `TMDB request failed with status ${res.status}`
+                );
+                error.response = { status: res.status, data: errData };
+                throw error;
+            }
 
-        const isRetryable =
-            retryableErrors.includes(error.code) ||
-            error.response?.status >= 500;
+            console.warn(
+                `TMDB attempt ${attempt} returned status ${res.status}. Retrying in ${delay}ms...`
+            );
+        } catch (err) {
+            if (err.response && [401, 403, 404].includes(err.response.status)) {
+                throw err;
+            }
 
-        if (isRetryable && retries > 0) {
+            if (attempt === retries) {
+                console.error(`All ${retries} attempts to TMDB failed: ${err.message}`);
+                throw err;
+            }
 
             console.log(
-                `TMDB request failed (${error.code || error.response?.status}). Retrying...`
+                `TMDB connection issue (${err.code || err.message}). Retrying attempt ${attempt + 1}/${retries} in ${delay}ms...`
             );
-
-            await new Promise((resolve) =>
-                setTimeout(resolve, 1000)
-            );
-
-            return tmdbRequest(
-                config,
-                retries - 1
-            );
+            await new Promise((r) => setTimeout(r, delay));
+            delay = Math.round(delay * 1.5);
         }
-
-        throw error;
     }
+
+    throw new Error("TMDB request failed after maximum retries");
 };
 
 // =====================================================
@@ -134,6 +138,21 @@ export const getNowPlayingMovies = async (req, res) => {
         );
 
         console.error("=================================");
+
+        // Graceful fallback to existing database movies if TMDB has temporary network issues
+        try {
+            const fallbackMovies = await Movie.find({});
+            if (fallbackMovies && fallbackMovies.length > 0) {
+                console.log("TMDB failed; returning fallback movies from database.");
+                return res.status(200).json({
+                    success: true,
+                    movies: fallbackMovies,
+                    isFallback: true,
+                });
+            }
+        } catch (dbError) {
+            console.error("Database fallback error:", dbError.message);
+        }
 
         return res.status(500).json({
             success: false,
@@ -287,40 +306,46 @@ export const addShow = async (req, res) => {
 
             const movieDetails = {
 
-                _id: movieId,
+                _id: String(movieId),
 
                 title:
-                    movieApiData.title || "",
+                    movieApiData.title || "Untitled",
 
                 overview:
-                    movieApiData.overview || "",
+                    movieApiData.overview || "No overview available.",
 
                 poster_path:
-                    movieApiData.poster_path || "",
+                    movieApiData.poster_path || movieApiData.backdrop_path || "",
 
                 backdrop_path:
-                    movieApiData.backdrop_path || "",
+                    movieApiData.backdrop_path || movieApiData.poster_path || "",
 
                 genres:
-                    movieApiData.genres || [],
+                    Array.isArray(movieApiData.genres) && movieApiData.genres.length > 0
+                        ? movieApiData.genres
+                        : [{ id: 1, name: "General" }],
 
                 casts:
-                    movieCreditsData.cast || [],
+                    Array.isArray(movieCreditsData.cast)
+                        ? movieCreditsData.cast
+                        : [],
 
                 release_date:
-                    movieApiData.release_date || "",
+                    movieApiData.release_date || new Date().toISOString().split("T")[0],
 
                 original_language:
-                    movieApiData.original_language || "",
+                    movieApiData.original_language || "en",
 
                 tagline:
                     movieApiData.tagline || "",
 
                 vote_average:
-                    movieApiData.vote_average || 0,
+                    typeof movieApiData.vote_average === "number"
+                        ? movieApiData.vote_average
+                        : 0,
 
                 runtime:
-                    movieApiData.runtime || 0,
+                    Number(movieApiData.runtime) || 120,
             };
 
             // -----------------------------------------

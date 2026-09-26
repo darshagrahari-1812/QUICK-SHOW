@@ -32,6 +32,17 @@ app.use(cors({
 app.use(express.json());
 app.use(clerkMiddleware());
 
+// Middleware to ensure DB connection in serverless environment
+app.use(async (req, res, next) => {
+    try {
+        await connectDB();
+        next();
+    } catch (error) {
+        console.error("Database connection middleware error:", error);
+        res.status(500).json({ success: false, message: "Database connection failed" });
+    }
+});
+
 // API Routes
 app.use('/api/inngest', serve({
     client: inngest,

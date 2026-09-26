@@ -15,7 +15,10 @@ const UserSync = () => {
       const syncUserData = async () => {
         try {
           const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-          const backendUrl = rawBackendUrl.replace(/\/+$/, ''); // Remove trailing slash
+          const trimmedUrl = rawBackendUrl.trim().replace(/\/+$/, '');
+          const backendUrl = trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')
+            ? trimmedUrl
+            : `https://${trimmedUrl}`;
           
           const email =
             user.primaryEmailAddress?.emailAddress ||

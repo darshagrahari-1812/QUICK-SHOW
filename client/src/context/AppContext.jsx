@@ -4,7 +4,12 @@ import { useAuth, useUser } from "@clerk/react";
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast"; // or wherever your toast lib is
 
-axios.defaults.baseURL = import.meta.env.VITE_BACKEND_URL
+const rawBaseURL = import.meta.env.VITE_BACKEND_URL || '';
+axios.defaults.baseURL = rawBaseURL
+    ? (rawBaseURL.startsWith('http://') || rawBaseURL.startsWith('https://')
+        ? rawBaseURL
+        : `https://${rawBaseURL}`)
+    : '';
 
 export const AppContext = createContext()
 
