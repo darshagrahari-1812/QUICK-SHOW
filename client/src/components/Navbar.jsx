@@ -2,12 +2,12 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { FaSearch } from 'react-icons/fa'
-import { MenuIcon, TicketPlus, XIcon } from 'lucide-react'
+import { MenuIcon, TicketPlus, XIcon, ShieldCheck, LayoutDashboard } from 'lucide-react'
 import { useClerk, useUser, UserButton } from '@clerk/react'
 import { useAppContext } from '../context/AppContext'
 
 const Navbar = () => {
-  const { favoriteMovies = [] } = useAppContext()
+  const { isAdmin, favoriteMovies = [] } = useAppContext()
   const [isOpen, setIsOpen] = useState(false)
 
   const { user } = useUser()
@@ -111,12 +111,26 @@ const Navbar = () => {
           Favourites
         </Link>}
 
+        {/* Admin Link for Mobile */}
+        {isAdmin && (
+          <Link
+            to='/admin'
+            onClick={() => {
+              scrollTo(0, 0)
+              setIsOpen(false)
+            }}
+            className='text-primary font-semibold'
+          >
+            Admin Panel
+          </Link>
+        )}
+
       </div>
 
 
-      {/* Search + Login/User */}
+      {/* Search + Admin + Login/User */}
 
-      <div className='flex items-center gap-8'>
+      <div className='flex items-center gap-4 sm:gap-6'>
 
         {/* Search Icon */}
 
@@ -124,6 +138,16 @@ const Navbar = () => {
           className='max-md:hidden w-6 h-6 cursor-pointer'
         />
 
+        {/* Admin Button on Desktop */}
+        {isAdmin && (
+          <Link
+            to='/admin'
+            className='hidden md:flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-full border border-primary/50 bg-primary/15 text-primary hover:bg-primary hover:text-white transition duration-200 shadow-sm'
+          >
+            <ShieldCheck className='w-4 h-4' />
+            Admin Panel
+          </Link>
+        )}
 
         {/* Clerk Login / User Button */}
 
@@ -142,6 +166,9 @@ const Navbar = () => {
             <UserButton>
               <UserButton.MenuItems>
                 <UserButton.Action label='My Bookings' labelIcon={<TicketPlus width={15} />} onClick={() => navigate('/my-bookings')} />
+                {isAdmin && (
+                  <UserButton.Action label='Admin Panel' labelIcon={<LayoutDashboard width={15} />} onClick={() => navigate('/admin')} />
+                )}
               </UserButton.MenuItems>
             </UserButton>
 

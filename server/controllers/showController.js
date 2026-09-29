@@ -164,6 +164,120 @@ export const getNowPlayingMovies = async (req, res) => {
 };
 
 // =====================================================
+// API: Search Movies from TMDB
+// GET /api/show/search-movies?query=...
+// =====================================================
+
+export const searchMovies = async (req, res) => {
+    try {
+        const { query } = req.query;
+        if (!query || !query.trim()) {
+            return res.status(400).json({ success: false, message: "Search query is required" });
+        }
+
+        const { data } = await tmdbRequest({
+            method: "GET",
+            url: "/search/movie",
+            params: {
+                query: query.trim(),
+                include_adult: false,
+                page: 1,
+            },
+        });
+
+        return res.status(200).json({
+            success: true,
+            movies: data.results || [],
+        });
+    } catch (error) {
+        console.error("TMDB search movies error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.response?.data?.status_message || error.message || "Failed to search movies",
+        });
+    }
+};
+
+// =====================================================
+// API: Discover Movies by Category or Genre
+// GET /api/show/discover?genre=...&category=...
+// =====================================================
+
+export const getDiscoverMovies = async (req, res) => {
+    try {
+        const { genre, category = "now_playing" } = req.query;
+
+        let url = `/movie/${category}`;
+        let params = { page: 1 };
+
+        if (genre) {
+            url = "/discover/movie";
+            params = {
+                with_genres: genre,
+                sort_by: "popularity.desc",
+                include_adult: false,
+                page: 1,
+            };
+        }
+
+        const { data } = await tmdbRequest({
+            method: "GET",
+            url,
+            params,
+        });
+
+        return res.status(200).json({
+            success: true,
+            movies: data.results || [],
+        });
+    } catch (error) {
+        console.error("TMDB discover movies error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.response?.data?.status_message || error.message || "Failed to fetch movies",
+        });
+    }
+};
+
+// =====================================================
+// API: Get Movie Genres
+// GET /api/show/genres
+// =====================================================
+
+export const getGenres = async (req, res) => {
+    try {
+        const { data } = await tmdbRequest({
+            method: "GET",
+            url: "/genre/movie/list",
+        });
+
+        return res.status(200).json({
+            success: true,
+            genres: data.genres || [],
+        });
+    } catch (error) {
+        console.error("TMDB get genres error:", error);
+        const fallbackGenres = [
+            { id: 28, name: "Action" },
+            { id: 12, name: "Adventure" },
+            { id: 16, name: "Animation" },
+            { id: 35, name: "Comedy" },
+            { id: 80, name: "Crime" },
+            { id: 18, name: "Drama" },
+            { id: 14, name: "Fantasy" },
+            { id: 27, name: "Horror" },
+            { id: 10749, name: "Romance" },
+            { id: 878, name: "Sci-Fi" },
+            { id: 53, name: "Thriller" },
+        ];
+        return res.status(200).json({
+            success: true,
+            genres: fallbackGenres,
+        });
+    }
+};
+
+// =====================================================
 // API: Add Show
 // POST /api/show/add
 // =====================================================

@@ -2,6 +2,9 @@ import express from "express";
 
 import {
     getNowPlayingMovies,
+    searchMovies,
+    getDiscoverMovies,
+    getGenres,
     addShow,
     getShow,
     getShows
@@ -10,7 +13,10 @@ import { protectAdmin } from "../middleware/auth.js";
 
 const showRouter = express.Router();
 
-showRouter.get("/now-playing",protectAdmin, getNowPlayingMovies);
+showRouter.get("/now-playing", protectAdmin, getNowPlayingMovies);
+showRouter.get("/search-movies", protectAdmin, searchMovies);
+showRouter.get("/discover", protectAdmin, getDiscoverMovies);
+showRouter.get("/genres", protectAdmin, getGenres);
 
 showRouter.post("/add", addShow);
 showRouter.get("/all",getShows);
