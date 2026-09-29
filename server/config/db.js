@@ -14,6 +14,11 @@ const connectDB = async () => {
 
     let uri = (process.env.MONGODB_URI || "").trim();
 
+    // Strip accidental variable name prefix (e.g. MONGODB_URI=mongodb+srv://...)
+    if (/^MONGODB_URI\s*=\s*/i.test(uri)) {
+        uri = uri.replace(/^MONGODB_URI\s*=\s*/i, "").trim();
+    }
+
     // Strip wrapping quotes (single, double, or backticks)
     if (
         (uri.startsWith('"') && uri.endsWith('"')) ||
@@ -21,6 +26,11 @@ const connectDB = async () => {
         (uri.startsWith('`') && uri.endsWith('`'))
     ) {
         uri = uri.slice(1, -1).trim();
+    }
+
+    // Re-check in case quotes were on the outside of MONGODB_URI=
+    if (/^MONGODB_URI\s*=\s*/i.test(uri)) {
+        uri = uri.replace(/^MONGODB_URI\s*=\s*/i, "").trim();
     }
 
     if (!uri) {
